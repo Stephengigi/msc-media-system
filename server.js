@@ -147,17 +147,34 @@ app.post('/media-toggle', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 删除媒体
 app.post('/media-delete', async (req, res) => {
   if (!req.session.user || req.session.user.role !== "admin") return res.status(403).json({ msg: "无权限" });
   const { id } = req.body;
-  const media = await pool.query(`SELECT media_url FROM media WHERE id=$1`, [id]);
-  if (media.rows.length > 0) {
-    const publicId = media.rows[0].media_url.split('/').slice(-2).join('/').split('.')[0];
-    await cloudinary.uploader.destroy(publicId, { resource_type: "auto" });
+  try {
+    const media = await pool.query(`SELECT * FROM media WHERE id=$1`, [id]);
+    if (media.rows.length > 0) {
+      const mediaInfo = media.rows[0];
+      // 提取Cloudinary文件ID
+      const publicId = mediaInfo.media_url.split('/').slice(-2).join('/').split('.')[0];
+      // 关键修复：视频用video类型删，图片用image类型删，之前统一用image找视频，当然找不到
+      const resourceType = mediaInfo.type === 'video' ? 'video' : 'image';
+      try {
+        // 删云端文件，就算失败也不影响列表删除
+        await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+      } catch (cloudErr) {
+        console.log("云端文件删除失败：", cloudErr.message);
+      }
+    }
+    // 不管云端删没删掉，先把数据库记录删掉，保证列表立刻消失
+    await pool.query(`DELETE FROM media WHERE id=$1`, [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("删除失败：", err);
+    res.status(500).json({ msg: "删除失败：" + err.message });
   }
-  await pool.query(`DELETE FROM media WHERE id=$1`, [id]);
-  res.json({ ok: true });
 });
+
 
 app.get('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login.html'));

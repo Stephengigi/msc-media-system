@@ -100,11 +100,14 @@ function showMedia(){
   mediaEl.style.display = "none";
   videoEl.style.display = "none";
   const src = item.media_url;
-  if(item.type === "image"){
+  // 自己从URL后缀判断是视频还是图片，不依赖后端传的type字段
+  const ext = src.split('.').pop().split('?')[0].toLowerCase();
+  const isVideo = ['mp4','webm','mov','avi','m4v'].includes(ext);
+  if(!isVideo){
     mediaEl.src = src;
     mediaEl.style.display = "block";
     setTimeout(nextMedia, IMAGE_DURATION);
-  } else{
+  } else {
     videoEl.src = src;
     videoEl.style.display = "block";
     videoEl.muted = !soundOn;
@@ -112,6 +115,7 @@ function showMedia(){
     videoEl.onended = nextMedia;
   }
 }
+
 
 function nextMedia(){
   currentIndex++;

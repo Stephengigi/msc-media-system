@@ -1,3 +1,179 @@
+<<<<<<< HEAD
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>媒体放映大厅</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+*{box-sizing:border-box}
+body{background:#000;margin:0;overflow:hidden;}
+#player-wrap{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
+#media-el{max-width:100%;max-height:100%;object-fit:contain;}
+#video-el{max-width:100%;max-height:100%;object-fit:contain;}
+#video-el, #media-el{display:none;}
+.admin-panel{position:fixed;top:12px;left:12px;z-index:999;background:rgba(0,0,0,0.75);border:1px solid #444;border-radius:14px;padding:14px;color:#fff;max-width:360px;}
+</style>
+</head>
+<body>
+    <!-- 右上角全局退出按钮，永远在最上层，不会被视频挡住 -->
+<div style="position:fixed;top:12px;right:12px;z-index:999;">
+  <a href="/logout" style="background:rgba(0,0,0,0.7);color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:14px;">退出登录</a>
+</div>
+<div class="admin-panel" id="adminPanel">
+  <div id="userInfo" class="mb-3 font-medium"></div>
+  <div id="uploadSection" class="mb-3">
+    <input type="file" id="fileInput" accept="image/*,video/mp4" class="text-sm">
+    <button onclick="uploadMedia()" class="px-3 py-1 bg-green-600 rounded ml-2 text-sm">上传</button>
+  </div>
+  <div id="mediaListPanel" class="mb-3 max-h-52 overflow-y-auto text-sm">
+    <div class="text-slate-300 mb-2">媒体列表：</div>
+    <div id="mediaListDom"></div>
+  </div>
+  <a href="/logout" class="px-3 py-1 bg-red-600 rounded text-sm">退出登录</a>
+</div>
+
+<div id="player-wrap">
+  <img id="media-el">
+  <video id="video-el" autoplay muted controls crossOrigin="anonymous"></video>
+</div>
+
+<script>
+let mediaList = [];
+let currentIndex = 0;
+const IMAGE_DURATION = 5000;
+const mediaEl = document.getElementById("media-el");
+const videoEl = document.getElementById("video-el");
+let userInfo = null;
+let soundOn = false; // 记录用户有没有手动开过声音
+
+// 👉 只要用户第一次点屏幕任何地方，立刻开声音，之后全程有声
+document.addEventListener('click', () => {
+  soundOn = true;
+  videoEl.muted = false;
+}, { once: true }); // 只需要监听第一次点击就行
+
+async function init(){
+  const res = await fetch("/me");
+  userInfo = await res.json();
+  if(!userInfo){
+    location.href = "/login.html";
+    return;
+  }
+document.getElementById("userInfo").innerText = `账号：${userInfo.username} (${userInfo.role === "admin" ? "管理员" : "菊厂MSC王店"})`;
+  //普通用户隐藏全部管理面板
+  // 普通用户隐藏上传和媒体管理区域，只留账号提示
+if(userInfo.role !== "admin"){
+  document.getElementById("uploadSection").style.display = "none";
+  document.getElementById("mediaListPanel").style.display = "none";
+}
+  await loadMediaList();
+}
+
+async function loadMediaList(){
+  const res = await fetch("/media-list");
+  mediaList = await res.json();
+  renderAdminMediaList();
+  if(mediaList.length === 0){
+    alert("暂无已上架媒体，请管理员上传素材");
+    return;
+  }
+  currentIndex = 0;
+  showMedia();
+}
+
+function renderAdminMediaList(){
+  if(userInfo.role !== "admin") return;
+  const dom = document.getElementById("mediaListDom");
+  dom.innerHTML = "";
+  mediaList.forEach(item=>{
+    const div = document.createElement("div");
+    div.className = "flex items-center justify-between py-1 border-b border-slate-700";
+    div.innerHTML = `
+      <span>${item.type} ${item.is_active ? "✅上架" : "⏸下架"}</span>
+      <div>
+        <button onclick="toggleActive(${item.id}, ${!item.is_active})" class="px-1.5 py-0.5 bg-amber-600 rounded mx-1">切换</button>
+        <button onclick="deleteMedia(${item.id})" class="px-1.5 py-0.5 bg-red-700 rounded">删除</button>
+      </div>
+    `;
+    dom.appendChild(div);
+  })
+}
+
+function showMedia(){
+  const item = mediaList[currentIndex];
+  mediaEl.style.display = "none";
+  videoEl.style.display = "none";
+  const src = item.media_url;
+  if(item.type === "image"){
+    mediaEl.src = src;
+    mediaEl.style.display = "block";
+    setTimeout(nextMedia, IMAGE_DURATION);
+  } else{
+    videoEl.src = src;
+    videoEl.style.display = "block";
+    videoEl.muted = !soundOn; // 没点过就静音，点过就自动开声音
+    videoEl.play();
+    videoEl.onended = nextMedia;
+  }
+}
+
+function nextMedia(){
+  currentIndex++;
+  if(currentIndex >= mediaList.length) currentIndex = 0;
+  showMedia();
+}
+
+async function uploadMedia(){
+  const file = document.getElementById("fileInput").files[0];
+  if(!file) {
+    alert("⚠️ 请先点击选择文件，选好图片或mp4视频再点上传！");
+    return;
+  }
+  try {
+    console.log("开始上传文件：", file.name);
+    const fd = new FormData();
+    fd.append("mediaFile", file);
+    const res = await fetch("/upload", {method:"POST", body:fd});
+    const data = await res.json();
+    if(data.ok){
+      alert("✅ 上传成功！");
+      await loadMediaList();
+    }else{
+      alert("❌ 上传失败：" + (data.msg || "未知错误"));
+    }
+  } catch (err) {
+    alert("❌ 网络错误，上传失败：" + err.message);
+    console.error("上传请求报错：", err);
+  }
+}
+
+
+async function toggleActive(id, status){
+  await fetch("/media-toggle", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({id, isActive: status})
+  })
+  loadMediaList();
+}
+
+async function deleteMedia(id){
+  if(!confirm("确定删除该媒体？云端文件也会删除")) return;
+  await fetch("/media-delete", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({id})
+  })
+  loadMediaList();
+}
+
+init();
+</script>
+</body>
+</html>
+=======
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -172,3 +348,4 @@ init();
 </script>
 </body>
 </html>
+>>>>>>> 412eaeb3b4c73fcb5abf443a9c38b832d06c827e

@@ -132,8 +132,9 @@ app.get('/media-list', async (req, res) => {
 
 app.post('/upload', upload.single('mediaFile'), async (req, res) => {
   if (!req.session.user || req.session.user.role !== "admin") return res.status(403).json({ msg: "无权限" });
-  const file = req.file;
-  const type = file.resource_type === "video" ? "video" : "image";
+ const file = req.file;
+// 用浏览器上传时自带的文件MIME类型判断，不会再把视频错认成图片
+const type = file.mimetype.startsWith('video/') ? "video" : "image";
   await pool.query(`INSERT INTO media(media_url,type,is_active) VALUES($1,$2,$3)`,
     [file.path, type, true]);
   res.json({ ok: true });
